@@ -105,12 +105,12 @@ if ((Connect-VIServer $vcenter -Credential $vcreds).IsConnected)
         while($scale -eq 0)
         {
             ### Get the DNS queries per second of the member ($dnsmember) specified using the SNMP powershell module ###
-	        [int] $dnsqps = (Get-SnmpData -IP $dnsmember -Community $snmpstring -OID 1.3.6.1.4.1.7779.3.1.1.3.1.6.0 -Version V2).Data
+	    [int] $dnsqps = (Get-SnmpData -IP $dnsmember -Community $snmpstring -OID 1.3.6.1.4.1.7779.3.1.1.3.1.6.0 -Version V2).Data
             Write-Host "[INFO] DNS QPS: $dnsqps; Scale-up threshold: $upthreshold; Scale-down threshold: $downthreshold" -ForegroundColor green
 
             ### The following section is executed if the DNS QPS exceeds the specified scale up threshold ($upthreshold) ###
-	        if($dnsqps -gt $upthreshold)
-	        {
+	    if($dnsqps -gt $upthreshold)
+	    {
                 $members = (Invoke-WebRequest -Uri "https://$gridmaster/wapi/v2.7/member" -Method GET -Credential $gmcreds).Content | ConvertFrom-Json
 
                 ### This condition ensures that the script does not scale up beyond the number of members specified as the $maxscaleup value. It compares the current number of scaled-up members and the scale up limit. ###
@@ -143,7 +143,7 @@ if ((Connect-VIServer $vcenter -Credential $vcreds).IsConnected)
                         ### Location in the vCenter Server where the new Virtual Machine needs to be created ###
                         ### NEEDS TO BE MODFIED WITH VALUES SPECIFIC TO YOUR ENVIRONMENT ###
                         $vmfolder = $vcenter+"\India\host\Compute\Resources\Autoscale-Testing-Krishna" 
-		                $vmlocation = "vi://"+$vusername+":"+$vpassword+"@"+$vmfolder
+		        $vmlocation = "vi://"+$vusername+":"+$vpassword+"@"+$vmfolder
                         ### The datastore the VM will reside on. You can run Get-Datastore command to get a list of all the datastores in your environment ###                
                         ### NEEDS TO BE MODFIED WITH VALUES SPECIFIC TO YOUR ENVIRONMENT ###
                         $datastore = "DS-ESX1-11B" 
@@ -171,22 +171,23 @@ if ((Connect-VIServer $vcenter -Credential $vcreds).IsConnected)
                         $membername = "autojoin-"+$random+".autoscale.com"
                         $licenses = "enterprise,dns,dhcp,vnios"
 
-		                ### This section uses the ovf tool to spin up a new VM and initializes the IP address and licenses using cloud-init (specified in the prop fields)###
+		        ### This section uses the ovf tool to spin up a new VM and initializes the IP address and licenses using cloud-init (specified in the prop fields)###
                         Write-Host "[INFO] Spinning up a member $membername in $vmfolder" -ForegroundColor yellow
-		                & 'C:\Program Files\VMware\VMware OVF Tool\ovftool.exe' --noSSLVerify --name=$membername --acceptAllEulas --datastore=$datastore -dm="thin" --network=$dportgroup --powerOn --prop:remote_console_enabled=True --prop:temp_license=$licenses --prop:lan1-v4_addr=$($memberip.address) --prop:lan1-v4_netmask=$($memberip.netmask) --prop:lan1-v4_gw=$($memberip.gateway) $ova $vmlocation
+			### If applicable, change the location of the ovftool tool ###
+		        & 'C:\Program Files\VMware\VMware OVF Tool\ovftool.exe' --noSSLVerify --name=$membername --acceptAllEulas --datastore=$datastore -dm="thin" --network=$dportgroup --powerOn --prop:remote_console_enabled=True --prop:temp_license=$licenses --prop:lan1-v4_addr=$($memberip.address) --prop:lan1-v4_netmask=$($memberip.netmask) --prop:lan1-v4_gw=$($memberip.gateway) $ova $vmlocation
                     
                         if((Get-VM $membername).PowerState -eq "PoweredOn")
                         {
                             ### This section waits for the VM to power on and get initialized with the IP address ###
                             while (!(Test-Connection -BufferSize 32 -Count 1 $($memberip.address) -Quiet))
-		                    {
-			                    Write-Host "[INFO] Waiting for member to come online" -ForegroundColor yellow
-			                    sleep 30
-		                    }
+		            {
+			        Write-Host "[INFO] Waiting for member to come online" -ForegroundColor yellow
+			        sleep 30
+		            }
                 
                             ### This section waits for the httpd service to start on the member ###
                             $pwd = ConvertTo-SecureString "infoblox" -AsPlainText -Force
-		                    $membercreds = New-Object Management.Automation.PSCredential ('admin', $pwd)
+		            $membercreds = New-Object Management.Automation.PSCredential ('admin', $pwd)
                             for ($continue=1;$continue -gt 0 -and $continue -lt 30)
                             {
                                 try
@@ -196,78 +197,74 @@ if ((Connect-VIServer $vcenter -Credential $vcreds).IsConnected)
                                 }
                                 catch
                                 {
-		                            Write-Host "[INFO] Waiting for httpd service to start (Attempt number $continue)" -ForegroundColor yellow
+		                    Write-Host "[INFO] Waiting for httpd service to start (Attempt number $continue)" -ForegroundColor yellow
                                     $continue++
-    		                        sleep 30
+    		                    sleep 30
                                 }
                             }
-                
-				            if($continue -lt 30)
-				            {
-					            ### This section adds an entry for the new member in the Grid Master ###
-					            Write-Host "[INFO] Provisioning the member on the Grid Master" -ForegroundColor yellow
-					            $memberdetails = @{
-						            host_name=$membername
-						            vip_setting=@{address=$($memberip.address)
-							            gateway=$($memberip.gateway)
-							            subnet_mask=$($memberip.netmask)}
-						            config_addr_type="IPV4"
-						            platform="VNIOS"} | ConvertTo-Json
-					            $memberresult = Invoke-WebRequest -Uri "https://$gridmaster/wapi/v2.7/member?_return_as_object=1" -Method POST -Credential $gmcreds -ContentType 'application/json' -Body $memberdetails
-					            if($memberresult.StatusCode -eq 201)
-					            {
-						            Write-Host "[INFO] Entry for $($memberip.address) has been added to the grid $gridmaster" -ForegroundColor Green
-					            }
-
-					            ### This section initiates a grid join from the member ###
-					            Write-Host "[INFO] Joining the member to the master" -ForegroundColor yellow
-                                ### NEEDS TO BE MODFIED WITH VALUES SPECIFIC TO YOUR ENVIRONMENT ###
-					            $gridjoindetails = @{
-						            grid_name="Infoblox"
-						            master=$gridmaster
-						            shared_secret="test"} | ConvertTo-Json
-					            $joinresult = Invoke-WebRequest -Uri "https://$($memberip.address)/wapi/v2.7/grid?_function=join&_return_as_object=1" -Method POST -Credential $membercreds -ContentType 'application/json' -Body $gridjoindetails
-					            if($joinresult.StatusCode -eq 200)
-					            {
-						            Write-Host "[INFO] $($memberip.address) has joined the grid with Grid Master at $gridmaster" -ForegroundColor Green
-					            }
+			    
+			    if($continue -lt 30)
+			    {
+			    	### This section adds an entry for the new member in the Grid Master ###
+				Write-Host "[INFO] Provisioning the member on the Grid Master" -ForegroundColor yellow
+				$memberdetails = @{host_name=$membername
+						   vip_setting=@{address=$($memberip.address)
+						   subnet_mask=$($memberip.netmask)}
+						   config_addr_type="IPV4"
+						   platform="VNIOS"} | ConvertTo-Json
+				$memberresult = Invoke-WebRequest -Uri "https://$gridmaster/wapi/v2.7/member?_return_as_object=1" -Method POST -Credential $gmcreds -ContentType 'application/json' -Body $memberdetails
+				if($memberresult.StatusCode -eq 201)
+				{
+					Write-Host "[INFO] Entry for $($memberip.address) has been added to the grid $gridmaster" -ForegroundColor Green
+				}
+				
+				### This section initiates a grid join from the member ###
+				Write-Host "[INFO] Joining the member to the master" -ForegroundColor yellow
+				### NEEDS TO BE MODFIED WITH VALUES SPECIFIC TO YOUR ENVIRONMENT ###
+				$gridjoindetails = @{grid_name="Infoblox"
+						     master=$gridmaster
+						     shared_secret="test"} | ConvertTo-Json
+				$joinresult = Invoke-WebRequest -Uri "https://$($memberip.address)/wapi/v2.7/grid?_function=join&_return_as_object=1" -Method POST -Credential $membercreds -ContentType 'application/json' -Body $gridjoindetails
+				if($joinresult.StatusCode -eq 200)
+				{
+					Write-Host "[INFO] $($memberip.address) has joined the grid with Grid Master at $gridmaster" -ForegroundColor Green
+				}
 
                                 ### This section creates a fixed address entry for the newly joined member in the grid ###
                                 ### This gets the MAC address of the VM from the vCenter server ###
                                 $mac = Get-View -Viewtype VirtualMachine -Property Name, Config.Hardware.Device | where name -EQ $membername | Select name,@{n="MAC"; e={($_.Config.Hardware.Device | ?{($_ -is [VMware.Vim.VirtualEthernetCard])} | %{$_.MacAddress})}}
                                 Write-Host "[INFO] Adding a fixed address entry to the Grid" -ForegroundColor yellow
-					            $fixedaddressdetails = @{
-						            ipv4addr=$($memberip.address)
-						            mac=$($mac.MAC[0])
-                                    name=$membername} | ConvertTo-Json
-					            $fixedaddressresult = Invoke-WebRequest -Uri "https://$gridmaster/wapi/v2.7/fixedaddress?_return_as_object=1" -Method POST -Credential $gmcreds -ContentType 'application/json' -Body $fixedaddressdetails
-					            if($fixedaddressresult.StatusCode -eq 201)
-					            { 
-						            Write-Host "[INFO] Fixed address entry for $($memberip.address) with MAC address $($mac.MAC[0]) has been added to the grid" -ForegroundColor Green
-					            } 
+				$fixedaddressdetails = @{ipv4addr=$($memberip.address)
+							 mac=$($mac.MAC[0])
+							 name=$membername} | ConvertTo-Json
+				$fixedaddressresult = Invoke-WebRequest -Uri "https://$gridmaster/wapi/v2.7/fixedaddress?_return_as_object=1" -Method POST -Credential $gmcreds -ContentType 'application/json' -Body $fixedaddressdetails
+				if($fixedaddressresult.StatusCode -eq 201)
+				{ 
+					Write-Host "[INFO] Fixed address entry for $($memberip.address) with MAC address $($mac.MAC[0]) has been added to the grid" -ForegroundColor Green
+				} 
 
-					            ### This section starts the DNS service on the member ###
+				### This section starts the DNS service on the member ###
                                 Write-Host "[INFO] Enabling DNS and DHCP services" -ForegroundColor Yellow
-					            $memberdns = (Invoke-WebRequest -Uri "https://$gridmaster/wapi/v2.7/member:dns?host_name=$membername" -Method GET -Credential $gmcreds).Content |ConvertFrom-Json
-					            $enabledns = @{enable_dns=$true} |ConvertTo-Json
-					            if((Invoke-WebRequest -Uri "https://$gridmaster/wapi/v2.7/$($memberdns._ref)" -Method PUT -Credential $gmcreds -ContentType 'application/json' -Body $enabledns).StatusCode -eq 200)
-					            {
-						            Write-Host "[INFO] DNS service is enabled" -ForegroundColor Green
-					            }
+				$memberdns = (Invoke-WebRequest -Uri "https://$gridmaster/wapi/v2.7/member:dns?host_name=$membername" -Method GET -Credential $gmcreds).Content |ConvertFrom-Json
+				$enabledns = @{enable_dns=$true} |ConvertTo-Json
+				if((Invoke-WebRequest -Uri "https://$gridmaster/wapi/v2.7/$($memberdns._ref)" -Method PUT -Credential $gmcreds -ContentType 'application/json' -Body $enabledns).StatusCode -eq 200)
+				{
+					Write-Host "[INFO] DNS service is enabled" -ForegroundColor Green
+				}
 
-					            ### This section starts the DHCP service on the member ###
-					            $memberdhcp = (Invoke-WebRequest -Uri "https://$gridmaster/wapi/v2.7/member:dhcpproperties?host_name=$membername" -Method GET -Credential $gmcreds).Content |ConvertFrom-Json
-					            $enabledhcp = @{enable_dhcp=$true} |ConvertTo-Json
-					            if((Invoke-WebRequest -Uri "https://$gridmaster/wapi/v2.7/$($memberdhcp._ref)" -Method PUT -Credential $gmcreds -ContentType 'application/json' -Body $enabledhcp).StatusCode -eq 200)
-					            {
-						            Write-Host "[INFO] DHCP service is enabled" -ForegroundColor Green
-					            }
+				### This section starts the DHCP service on the member ###
+				$memberdhcp = (Invoke-WebRequest -Uri "https://$gridmaster/wapi/v2.7/member:dhcpproperties?host_name=$membername" -Method GET -Credential $gmcreds).Content |ConvertFrom-Json
+				$enabledhcp = @{enable_dhcp=$true} |ConvertTo-Json
+				if((Invoke-WebRequest -Uri "https://$gridmaster/wapi/v2.7/$($memberdhcp._ref)" -Method PUT -Credential $gmcreds -ContentType 'application/json' -Body $enabledhcp).StatusCode -eq 200)
+				{
+					Write-Host "[INFO] DHCP service is enabled" -ForegroundColor Green
+				}
 
-					            ### This section adds the member as a grid secondary to the nameserver group called "default" ###
+				### This section adds the member as a grid secondary to the nameserver group called "default" ###
                                 ### NEEDS TO BE MODFIED WITH VALUES SPECIFIC TO YOUR ENVIRONMENT ###
-					            $nsname = "default"
-					            $nsgroup = (Invoke-WebRequest -Uri "https://$gridmaster/wapi/v2.7/nsgroup?_return_fields%2B=grid_secondaries&name=$nsname" -Method GET -Credential $gmcreds).Content | ConvertFrom-Json
-					            Write-Host "[INFO] Adding member $membername to nameserver group $($nsgroup.name)" -ForegroundColor Yellow
+				$nsname = "default"
+				$nsgroup = (Invoke-WebRequest -Uri "https://$gridmaster/wapi/v2.7/nsgroup?_return_fields%2B=grid_secondaries&name=$nsname" -Method GET -Credential $gmcreds).Content | ConvertFrom-Json
+				Write-Host "[INFO] Adding member $membername to nameserver group $($nsgroup.name)" -ForegroundColor Yellow
                                 ### This gets the list of all the existing grid secondaries in the namserver group ###
                                 $gridsecondaries = $null
                                 foreach ($secondary in ($nsgroup.grid_secondaries.name))
@@ -289,21 +286,21 @@ if ((Connect-VIServer $vcenter -Credential $vcreds).IsConnected)
                                     Write-Host "[INFO] Member $membername is added to nameserver group $($nsgroup.name)" -ForegroundColor Green
                                 }					
 
-					            ### Append this member to the list of members in the grid ###
-					            $memberlist += @($membername)
+				### Append this member to the list of members in the grid ###
+				$memberlist += @($membername)
                                 $scaleup++
 
-					            Write-Host "[INFO] Auto scale-up complete" -ForegroundColor green
+				Write-Host "[INFO] Auto scale-up complete" -ForegroundColor green
                             }
                             else
                             {
                                 Write-Host "[ERROR] There was an issue while deploying the Virtual Machine" -ForegroundColor Red
                             }
-		                }
-				        else
-				        {
-					        Write-Host "[ERROR] There was an issue while starting the httpd service. Scale-up failed" -ForegroundColor Red
-				        }
+			}
+			else
+			{
+				Write-Host "[ERROR] There was an issue while starting the httpd service. Scale-up failed" -ForegroundColor Red
+			}
                     }
                     else
                     {
@@ -314,12 +311,12 @@ if ((Connect-VIServer $vcenter -Credential $vcreds).IsConnected)
                 {
                     Write-Host "[WARNING] We have already created $maxscaleup member(s) while scaling up. Cannot scale up any further!!" -ForegroundColor Yellow
                 }
-	        }
+	}
 
-            ### The following section is executed if the DNS QPS is below the specified scale down threshold. The most recently scaled up member is removed ###
-            elseif ($dnsqps -lt $downthreshold)
-            {
-                Write-Host "[WARNING] DNS QPS ($dnsqps) is lesser than the threshold $downthreshold" -ForegroundColor red
+	### The following section is executed if the DNS QPS is below the specified scale down threshold. The most recently scaled up member is removed ###
+        elseif ($dnsqps -lt $downthreshold)
+	{
+		Write-Host "[WARNING] DNS QPS ($dnsqps) is lesser than the threshold $downthreshold" -ForegroundColor red
 
                 ### This gets all the members in the grid currently ###
                 $members = (Invoke-WebRequest -Uri "https://$gridmaster/wapi/v2.7/member" -Method GET -Credential $gmcreds).Content | ConvertFrom-Json
@@ -391,30 +388,30 @@ if ((Connect-VIServer $vcenter -Credential $vcreds).IsConnected)
 
                         ### This section removes the fixed address entry of the member from the grid ###
                         Write-Host "[INFO] Removing the fixed address entry from the Grid" -ForegroundColor yellow
-    		            $fixedaddresstodelete = (Invoke-WebRequest -Uri "https://$gridmaster/wapi/v2.7/fixedaddress?ipv4addr=$($membertodelete.vip_setting.address)" -Method GET -Credential $gmcreds ).Content | ConvertFrom-Json
-					    if((Invoke-WebRequest -Uri "https://$gridmaster/wapi/v2.7/$($fixedaddresstodelete._ref)" -Method DELETE -Credential $gmcreds -ContentType 'application/json').StatusCode -eq 200)
-					    {
+    			$fixedaddresstodelete = (Invoke-WebRequest -Uri "https://$gridmaster/wapi/v2.7/fixedaddress?ipv4addr=$($membertodelete.vip_setting.address)" -Method GET -Credential $gmcreds ).Content | ConvertFrom-Json
+			if((Invoke-WebRequest -Uri "https://$gridmaster/wapi/v2.7/$($fixedaddresstodelete._ref)" -Method DELETE -Credential $gmcreds -ContentType 'application/json').StatusCode -eq 200)
+			{
                             Write-Host "[INFO] Fixed address entry for $($membertodelete.vip_setting.address) has been deleted from the grid" -ForegroundColor Green
-			            } 
+			} 
 
                         ### Power off and delete the VM from vCenter ###
                         Write-Host "[INFO] Shutting down and deleting the VM $($memberlist[($memberlist.Count)-1]) from vCenter" -ForegroundColor Yellow
                         if ((Stop-VM $($memberlist[($memberlist.Count)-1]) -Confirm:$false).PowerState -eq "PoweredOff")
-					    {
-						    Write-Host "[INFO] The VM $($memberlist[($memberlist.Count)-1]) has been shut down" -ForegroundColor Green
-						    Remove-VM $($memberlist[($memberlist.Count)-1]) -DeletePermanently -Confirm:$false
-                            Write-Host "[INFO] The VM $($memberlist[($memberlist.Count)-1]) has been deleted from the vCenter server" -ForegroundColor Green
+			{
+				Write-Host "[INFO] The VM $($memberlist[($memberlist.Count)-1]) has been shut down" -ForegroundColor Green
+				Remove-VM $($memberlist[($memberlist.Count)-1]) -DeletePermanently -Confirm:$false
+                            	Write-Host "[INFO] The VM $($memberlist[($memberlist.Count)-1]) has been deleted from the vCenter server" -ForegroundColor Green
 
-						    ### Remove the member from the list of members in the grid ###
-						    $memberlist.Remove($($memberlist[($memberlist.Count)-1]))
-                            $scaleup--
+				### Remove the member from the list of members in the grid ###
+				$memberlist.Remove($($memberlist[($memberlist.Count)-1]))
+                            	$scaleup--
 
-						    Write-Host "[INFO] Auto scale-down complete" -ForegroundColor green
-					    }
-					    else
-					    {
-						    Write-Host "[ERROR] There was error while shutting down the VM" -ForegroundColor Red
-					    }
+				Write-Host "[INFO] Auto scale-down complete" -ForegroundColor green
+			}
+			else
+			{
+				Write-Host "[ERROR] There was error while shutting down the VM" -ForegroundColor Red
+			}
                     }
                     else
                     {
@@ -422,14 +419,14 @@ if ((Connect-VIServer $vcenter -Credential $vcreds).IsConnected)
                     }
                 }
             }
-	        $count++
-	        if($count -gt 1000)
-	        {
-		        $scale = 1
-	        }
+	    $count++
+	    if($count -gt 1000)
+	    {
+	    	$scale = 1
+	    }
 
             ### The monitoring is paused for the duration of the polling interval specified ###
-	        sleep $frequency
+	    sleep $frequency
         }
     }
 }
