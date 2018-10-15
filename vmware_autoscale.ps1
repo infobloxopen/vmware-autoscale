@@ -423,7 +423,7 @@ if ((Connect-VIServer $vcenter -Credential $vcreds).IsConnected)
                 }
             }
 	        $count++
-	        if($count -gt 10)
+	        if($count -gt 1000)
 	        {
 		        $scale = 1
 	        }
