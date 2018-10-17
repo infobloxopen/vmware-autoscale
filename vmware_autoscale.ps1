@@ -209,6 +209,7 @@ if ((Connect-VIServer $vcenter -Credential $vcreds).IsConnected)
 				Write-Host "[INFO] Provisioning the member on the Grid Master" -ForegroundColor yellow
 				$memberdetails = @{host_name=$membername
 						   vip_setting=@{address=$($memberip.address)
+						   gateway=$($memberip.gateway)
 						   subnet_mask=$($memberip.netmask)}
 						   config_addr_type="IPV4"
 						   platform="VNIOS"} | ConvertTo-Json
