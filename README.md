@@ -8,7 +8,7 @@ Ensure you have the following components in your environment:
 
  - Windows Powershell
  -  Powershell SNMP module
- - VMWare PowerCLI
+ - VMWare PowerCLI module for Powershell
  - ovftool
  - Connectivity to both, the vCenter Server and Infoblox Grid
 
