@@ -37,7 +37,7 @@ Ensure that you modify the variables above which the comment "NEEDS TO BE MODIFI
  - The time interval during which the QPS is additionally monitored after the scale-up limit has reached, in order to ensure that this was not just a momentary spike.
  - The maximum number of members that can be automatically created while scaling up, beyond which even if the scale-up threshold is crossed, new members won't be spun up.
  - The scale-down limit, that is the threshold below which the most recently scaled up member will be deleted
- - The time intevral during which the QPS in additionally monitored after the scale-down limit has reached, in order to ensure that this was not a momentary slow down.
+ - The time interval during which the QPS in additionally monitored after the scale-down limit has reached, in order to ensure that this was not a momentary slow down.
  - The OVA file based off of which a new member will be spun up (any non-DDI image)
  - The vCenter Server IP address or FQDN
  - The username and password to access the vCenter Server
