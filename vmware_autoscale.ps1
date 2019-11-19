@@ -169,7 +169,7 @@ if ((Connect-VIServer $vcenter -Credential $vcreds).IsConnected)
                         ### NEEDS TO BE MODFIED WITH VALUES SPECIFIC TO YOUR ENVIRONMENT ###
                         $memberip = @{"address"=$availableip;"gateway"="10.196.202.1";"netmask"="255.255.255.0"}
                         $membername = "autojoin-"+$random+".autoscale.com"
-                        $licenses = "enterprise,dns,dhcp,vnios"
+                        $licenses = "nios,IB-V815,enterprise,dns,dhcp"
 
 		        ### This section uses the ovf tool to spin up a new VM and initializes the IP address and licenses using cloud-init (specified in the prop fields)###
                         Write-Host "[INFO] Spinning up a member $membername in $vmfolder" -ForegroundColor yellow
